@@ -49,6 +49,13 @@ public readonly struct RingSocketEvent
     public nint AcceptedSocketHandle { get; private init; }
 
     /// <summary>
+    /// For Accept events, the listener index the accept was posted with
+    /// (<see cref="IORingUserData.EncodeAccept(int)"/>), so a consumer with several listeners knows
+    /// which one to re-arm and what the connection arrived on.
+    /// </summary>
+    public int ListenerIndex { get; private init; }
+
+    /// <summary>
     /// Creates a data received event.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -85,10 +92,18 @@ public readonly struct RingSocketEvent
     /// Creates an accept event.
     /// </summary>
     /// <param name="socketHandle">The accepted socket handle, or negative for error.</param>
-    public static RingSocketEvent Accepted(nint socketHandle) => new()
+    public static RingSocketEvent Accepted(nint socketHandle) => Accepted(socketHandle, 0);
+
+    /// <summary>
+    /// Creates an accept event for the listener at <paramref name="listenerIndex"/>.
+    /// </summary>
+    /// <param name="socketHandle">The accepted socket handle, or negative for error.</param>
+    /// <param name="listenerIndex">The index passed to <see cref="IORingUserData.EncodeAccept(int)"/>.</param>
+    public static RingSocketEvent Accepted(nint socketHandle, int listenerIndex) => new()
     {
         Type = RingSocketEventType.Accept,
-        AcceptedSocketHandle = socketHandle
+        AcceptedSocketHandle = socketHandle,
+        ListenerIndex = listenerIndex
     };
 }
 
@@ -730,7 +745,8 @@ public sealed class RingSocketManager : IDisposable
             {
                 if (eventCount < events.Length)
                 {
-                    events[eventCount++] = RingSocketEvent.Accepted(cqe.Result);
+                    // An accept's socket-id field carries the listener index.
+                    events[eventCount++] = RingSocketEvent.Accepted(cqe.Result, socketId);
                 }
                 continue;
             }
